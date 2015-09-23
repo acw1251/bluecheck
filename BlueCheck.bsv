@@ -60,6 +60,9 @@ typedef struct {
   // Is the wedge-detector enabled?
   Bool wedgeDetect;
 
+  // How many cycles of inactivity does the wedge-detector wait for?
+  Bit#(16) wedgeThreshold;
+
   // Generate a checker based on an iterative deepening strategy
   // (If 'False', a single random state walk is performed)
   Bool useIterativeDeepening;
@@ -1329,11 +1332,11 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   // --------------
 
   if (params.wedgeDetect)
-    rule wedgeDetect (actionsEnabled && !waitWire);
+    rule wedgeDetect (actionsEnabled);
       if (didFire)
         consecutiveNonFires <= 0;
       else begin
-        if (consecutiveNonFires == 10000)
+        if (consecutiveNonFires == params.wedgeThreshold)
           begin
             if (verbose) $display("\nPossible wedge detected\n");
             consecutiveNonFires <= 0;
@@ -2019,6 +2022,7 @@ BlueCheck_Params bcParams =
   , showNoOp              : False
   , showTime              : False
   , wedgeDetect           : False
+  , wedgeThreshold        : 10000
   , useIterativeDeepening : False
   , interactive           : False
   , useShrinking          : False
@@ -2049,6 +2053,7 @@ function BlueCheck_Params bcParamsID(MakeResetIfc rst);
     , showNoOp              : False
     , showTime              : True
     , wedgeDetect           : False
+    , wedgeThreshold        : 10000
     , useIterativeDeepening : True
     , interactive           : True
     , useShrinking          : True
