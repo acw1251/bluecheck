@@ -808,7 +808,7 @@ function Bool shouldDisplay(App app) =
 
 // Sequence a list of statements.
 
-function Stmt seqList(Bool show, List#(Tuple2#(App, Stmt)) xs);
+function Stmt seqList(Bool show, Fmt msg_prefix, List#(Tuple2#(App, Stmt)) xs);
   if (xs matches tagged Nil)
     return (seq delay(1); endseq);
   else begin
@@ -817,11 +817,11 @@ function Stmt seqList(Bool show, List#(Tuple2#(App, Stmt)) xs);
     Stmt s  =
       seq
         action
-          if (show && shouldDisplay(app)) $display(formatApp(app));
+          if (show && shouldDisplay(app)) $display(msg_prefix, formatApp(app));
         endaction
         tpl_2(t);
       endseq;
-    return (seq s; seqList(show, List::tail(xs)); endseq);
+    return (seq s; seqList(show, msg_prefix, List::tail(xs)); endseq);
   end
 endfunction
 
@@ -1115,6 +1115,20 @@ endmodule
 module [Module] mkModelChecker#( BlueCheck#(Empty) bc
                                , BlueCheck_Params params ) (Stmt);
 
+  // Timer
+  // -----
+
+  Reg#(Bit#(32)) timer <- mkReg(0);
+  Wire#(Bool) resetTimer <- mkDWire(False);
+  Fmt timeInfo = params.showTime ? $format("%0t: ", timer) : $format("");
+
+  rule incTimer;
+    if (resetTimer)
+      timer <= 0;
+    else
+      timer <= timer+1;
+  endrule
+
   // Read any flags from the command-line
   // ------------------------------------
 
@@ -1154,8 +1168,8 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   let ensureItems    = concat(map(getEnsureItem, items));
   let invariantBools = concat(map(getInvariantItem, items));
   let classifyItems  = concat(map(getClassifyItem, items));
-  let preStmt        = seqList(verbose, concat(map(getPreStmtItem, items)));
-  let postStmt       = seqList(verbose, concat(map(getPostStmtItem, items)));
+  let preStmt        = seqList(verbose, timeInfo, concat(map(getPreStmtItem, items)));
+  let postStmt       = seqList(verbose, timeInfo, concat(map(getPostStmtItem, items)));
   let prngItems      = concat(map(getPRNGItem, items));
   let actionApps     = map(tpl_2, actionItems);
   let stmtApps       = map(tpl_2, stmtItems);
@@ -1246,20 +1260,6 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       if (wedgeFailure) wedgeDetected <= True;
       failureReg <= True;
     end
-  endrule
-
-  // Timer
-  // -----
-
-  Reg#(Bit#(32)) timer <- mkReg(0);
-  Wire#(Bool) resetTimer <- mkDWire(False);
-  Fmt timeInfo = params.showTime ? $format("%0t: ", timer) : $format("");
-
-  rule incTimer;
-    if (resetTimer)
-      timer <= 0;
-    else
-      timer <= timer+1;
   endrule
 
   // Seed the random generators
