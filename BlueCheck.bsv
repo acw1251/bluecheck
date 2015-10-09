@@ -1215,6 +1215,10 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   // Wedge detector: count consecutive non-firings
   Reg#(Bit#(16)) consecutiveNonFires <- mkReg(0);
 
+  // State machines for pre and post actions
+  FSM preFSM <- mkFSM(preStmt);
+  FSM postFSM <- mkFSM(postStmt);
+
   // When count is 0, actions/statements are disabled
   // ------------------------------------------------
 
@@ -1332,7 +1336,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   // --------------
 
   if (params.wedgeDetect)
-    rule wedgeDetect (actionsEnabled);
+    rule wedgeDetect (actionsEnabled || prePostActive);
       if (didFire)
         consecutiveNonFires <= 0;
       else begin
@@ -1365,7 +1369,6 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         fsm.start;
         fsmRunning <= True;
         waitWire.send;
-        consecutiveNonFires <= 0;
       endrule
 
       rule assertWait (actionsEnabled && inState[s] && fsmRunning && !fsm.done);
@@ -1375,6 +1378,12 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       rule finishStmt (actionsEnabled && inState[s] && fsmRunning && fsm.done);
         fsmRunning <= False;
         didFire.send;
+      endrule
+
+      rule abortStmt (actionsEnabled && inState[s] && fsmRunning && wedgeDetected);
+        // If a wedge was detected, abort the FSM early so BlueCheck can recover
+        fsm.abort;
+        fsmRunning <= False;
       endrule
 
       rule viewStmt (triggerView && inState[s]);
@@ -1641,11 +1650,19 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         let _ <- List::mapM(assignReg(True), ensureShows);
       endaction
 
-      prePostActive <= True;
-      preStmt;
-      prePostActive <= False;
+      action
+        prePostActive <= True;
+        preFSM.start;
+      endaction
+      action
+        await(preFSM.done || wedgeDetected);
+        prePostActive <= False;
+      endaction
 
-      count <= 1;
+      action
+        if (wedgeDetected) preFSM.abort;
+        count <= 1;
+      endaction
       while (!testDone)
         action
           await(!waitWire);
@@ -1671,9 +1688,16 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
             end
         endaction
 
-      prePostActive <= True;
-      postStmt;
-      prePostActive <= False;
+      action
+        prePostActive <= True;
+        postFSM.start;
+      endaction
+      action
+        await(postFSM.done || wedgeDetected);
+        prePostActive <= False;
+      endaction
+      if (wedgeDetected)
+        postFSM.abort;
 
       if (!failureFound)
         action
@@ -1708,11 +1732,19 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
       // Test sequence starts here
       delay(1);
-      prePostActive <= True;
-      preStmt;
-      prePostActive <= False;
+      action
+        prePostActive <= True;
+        preFSM.start;
+      endaction
+      action
+        await(preFSM.done || wedgeDetected);
+        prePostActive <= False;
+      endaction
 
-      delay(1);
+      if (wedgeDetected)
+        preFSM.abort;
+      else
+        delay(1);
       while (count < counterExampleLen)
         action
           await(!waitWire);
@@ -1745,9 +1777,16 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         count <= 0;
       endaction
 
-      prePostActive <= True;
-      postStmt;
-      prePostActive <= False;
+      action
+        prePostActive <= True;
+        postFSM.start;
+      endaction
+      action
+        await(postFSM.done || wedgeDetected);
+        prePostActive <= False;
+      endaction
+      if (wedgeDetected)
+        postFSM.abort;
     endseq;
 
   // Simply view a counter-example loaded from a file (i.e. don't replay it)
@@ -1887,11 +1926,20 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
               // Test sequence starts here
               delay(1);
-              prePostActive <= True;
-              preStmt;   // Execute user-defined pre-statement
-              prePostActive <= False;
-
-              count <= 1;
+              // Execute user-defined pre-statements
+              action
+                prePostActive <= True;
+                preFSM.start;
+              endaction
+              action
+                await(preFSM.done || wedgeDetected);
+                prePostActive <= False;
+              endaction
+              action
+                // This can't be done with the previous action
+                if (wedgeDetected) preFSM.abort;
+                count <= 1;
+              endaction
               while (!testDone)
                 action
                   // This action only fires when not waiting for a
@@ -1927,11 +1975,20 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
                     end
                 endaction
 
-              prePostActive <= True;
-              postStmt; // Execute user-defined post-statement
-              prePostActive <= False;
+              // Execute user-defined post-statements
+              action
+                prePostActive <= True;
+                postFSM.start;
+              endaction
+              action
+                await(postFSM.done || wedgeDetected);
+                prePostActive <= False;
+              endaction
 
-              testNum <= testNum+1;
+              action
+                if (wedgeDetected) postFSM.abort;
+                testNum <= testNum+1;
+              endaction
             endseq
 
           if (!failureFound) action
