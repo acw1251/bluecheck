@@ -1,6 +1,10 @@
 BlueCheck
 =========
 
+(NOTE: This version of BlueCheck has been modified from the original
+version to support shrinking for modules that may deadlock or trigger
+the wedge detector)
+
 (Inspired by the QuickCheck tool for testing Haskell programs.)
 
 BlueCheck is a *generic* test-bench written in the Bluespec HDL.  It
