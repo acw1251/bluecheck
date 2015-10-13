@@ -2,7 +2,7 @@ import Clocks::*;
 import StmtFSM::*;
 import BlueCheck::*;
 
-module [BlueCheck] checkWedge#(Reset soft_rst)(Empty);
+module [BlueCheck] checkWedge#(Reset soft_rst, Bool stmtWithGuard)(Empty);
     Reg#(Bit#(8)) r <- mkReg(0, reset_by soft_rst);
 
     function Action doStuff(Bit#(8) x);
@@ -26,7 +26,10 @@ module [BlueCheck] checkWedge#(Reset soft_rst)(Empty);
     endseq);
 
     prop("doStuff", doStuff);
-    prop("wedgeStmt", wedgeStmt);
+    if (stmtWithGuard)
+      prop("wedgeStmt", stmtWhen(r != 'hFF, wedgeStmt));
+    else
+      prop("wedgeStmt", wedgeStmt);
     pre("doPre", preStmt);
     post("checkPost", postStmt);
 endmodule
@@ -55,10 +58,37 @@ module [Module] mkWedgeExample(Empty);
     // my_params.wedgeDetect = True;
     // my_params.numIterations = 10;
 
-    Stmt s <- mkModelChecker(checkWedge(soft_rst), my_params);
+    Stmt s <- mkModelChecker(checkWedge(soft_rst, False), my_params);
     mkAutoFSM(s);
 endmodule
 
+(* synthesize *)
+module [Module] mkWedgeExampleWithGuardedStmt(Empty);
+    Clock clk <- exposeCurrentClock;
+    MakeResetIfc my_rst <- mkReset(0, True, clk);
+    Reset soft_rst = my_rst.new_rst;
+
+    // Iterative Deepening
+    BlueCheck_Params my_params = bcParams;
+    ID_Params my_id_params = ID_Params {rst: my_rst, initialDepth: 10, testsPerDepth: 100, incDepth: ( ( \+ )(10) )};
+    my_params.verbose = True;
+    my_params.showTime = True;
+    // my_params.showNoOp = True;
+    my_params.wedgeDetect = True;
+    my_params.useIterativeDeepening = True;
+    my_params.id = my_id_params;
+    my_params.useShrinking = True;
+
+    // BlueCheck_Params my_params = bcParams;
+    // my_params.verbose = True;
+    // my_params.showTime = True;
+    // my_params.showNoOp = True;
+    // my_params.wedgeDetect = True;
+    // my_params.numIterations = 10;
+
+    Stmt s <- mkModelChecker(checkWedge(soft_rst, True), my_params);
+    mkAutoFSM(s);
+endmodule
 
 
 module [BlueCheck] checkWedge2#(Reset soft_rst)(Empty);

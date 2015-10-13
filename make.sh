@@ -54,7 +54,8 @@ echo "(8) Stack(algebraic) + ID"
 echo "(9) Stack(synthesisable)"
 echo "(10) Stack(synthesisable) + ID"
 echo "(11) Wedge Test"
-echo "(12) Wedge Test 2"
+echo "(12) Wedge Test with Guarded Stmt"
+echo "(13) Wedge Test 2"
 
 read OPTION
 case "$OPTION" in
@@ -94,6 +95,9 @@ case "$OPTION" in
      TOPMOD=mkWedgeExample
      ;;
  12) TOPFILE=WedgeExample.bsv
+     TOPMOD=mkWedgeExampleWithGuardedStmt
+     ;;
+ 13) TOPFILE=WedgeExample.bsv
      TOPMOD=mkWedgeExample2
      ;;
   *) echo "Option not recognised"

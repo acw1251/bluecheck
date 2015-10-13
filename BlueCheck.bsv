@@ -124,6 +124,19 @@ typedef Bit#(LogMaxStates) State;
 
 typedef Integer Freq;
 
+// Typedef for stmt with a guard
+
+typedef struct {
+  Stmt stmt;
+  Bool guard;
+} GuardedStmt;
+
+// Just like when for actions, but adds a guard to a stmt
+
+function GuardedStmt stmtWhen( Bool guard, Stmt stmt );
+    return GuardedStmt{ stmt: stmt, guard: guard };
+endfunction
+
 // ============================================================================
 // BlueCheck collection data type
 // ============================================================================
@@ -138,7 +151,7 @@ typedef ModuleCollect#(Item) Specification;
 
 typedef union tagged {
   Tuple3#(Freq, App, Action) ActionItem;
-  Tuple3#(Freq, App, Stmt) StmtItem;
+  Tuple3#(Freq, App, GuardedStmt) StmtItem;
   Tuple2#(Freq, List#(String)) ParItem;
   Action GenItem;
   List#(PRNG16) PRNGItem;
@@ -156,7 +169,7 @@ function List#(a) single(a x) = Cons(x, Nil);
 function List#(Tuple3#(Freq, App, Action)) getActionItem(Item item) =
   item matches tagged ActionItem .x ? single(x) : Nil;
 
-function List#(Tuple3#(Freq, App, Stmt)) getStmtItem(Item item) =
+function List#(Tuple3#(Freq, App, GuardedStmt)) getStmtItem(Item item) =
   item matches tagged StmtItem .x ? single(x) : Nil;
 
 function List#(Tuple2#(Freq, List#(String))) getParItem(Item item) =
@@ -436,8 +449,16 @@ endinstance
 
 // Base case 2: a statement.
 
+// Without a guard
 instance Prop#(Stmt);
   module [BlueCheck] addProp#(Freq freq, App app, Stmt s) ();
+    addToCollection(tagged StmtItem (tuple3(freq, app, stmtWhen(True, s))));
+  endmodule
+endinstance
+
+// With a guard
+instance Prop#(GuardedStmt);
+  module [BlueCheck] addProp#(Freq freq, App app, GuardedStmt s) ();
     addToCollection(tagged StmtItem (tuple3(freq, app, s)));
   endmodule
 endinstance
@@ -532,10 +553,22 @@ endinstance
 
 // Base case 2: two statements.
 
+// Neither guarded
 instance Equiv#(Stmt);
   module [BlueCheck] addEquiv#(Freq fr, App app, Stmt a, Stmt b) ();
     Stmt s = par a; b; endpar;
-    addToCollection(tagged StmtItem (tuple3(fr, app, s)));
+    GuardedStmt gs = stmtWhen(True, s);
+    addToCollection(tagged StmtItem (tuple3(fr, app, gs)));
+  endmodule
+endinstance
+
+// Both guarded
+instance Equiv#(GuardedStmt);
+  module [BlueCheck] addEquiv#(Freq fr, App app, GuardedStmt a, GuardedStmt b) ();
+    Stmt s = par a.stmt; b.stmt; endpar;
+    Bool g = a.guard && b.guard;
+    GuardedStmt gs = stmtWhen(g, s);
+    addToCollection(tagged StmtItem (tuple3(fr, app, gs)));
   endmodule
 endinstance
 
@@ -1363,9 +1396,10 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
     begin
       Integer s = length(actions)+i;
       Reg#(Bool) fsmRunning <- mkReg(False);
-      FSM fsm <- mkFSMWithPred(stmts[i], actionsEnabled && inState[s]);
+      FSM fsm <- mkFSMWithPred(stmts[i].stmt, actionsEnabled && inState[s]);
 
-      rule runStmt (actionsEnabled && inState[s] && !fsmRunning);
+      // make sure guard is enabled before starting FSM
+      rule runStmt (actionsEnabled && inState[s] && !fsmRunning && stmts[i].guard);
         if (!wedgeCheck)
           begin
             if (verbose && shouldDisplay(stmtApps[i]))
