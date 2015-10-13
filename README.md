@@ -3,7 +3,8 @@ BlueCheck
 
 (NOTE: This version of BlueCheck has been modified from the original
 version to support shrinking for modules that may deadlock or trigger
-the wedge detector)
+the wedge detector. *This has not been fully tested yet*, but it looks
+good so far. -Andy)
 
 (Inspired by the QuickCheck tool for testing Haskell programs.)
 
