@@ -1322,7 +1322,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   for (Integer i = 0; i < numActions; i=i+1)
     begin
       rule runAction (actionsEnabled && inState[i] && !waitWire);
-        if (verbose && shouldDisplay(actionApps[i]))
+        if (verbose && shouldDisplay(actionApps[i]) && !wedgeCheck)
           $display(timeInfo, formatApp(actionApps[i]));
         actions[i];
         didFire.send;
@@ -1366,10 +1366,10 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       FSM fsm <- mkFSMWithPred(stmts[i], actionsEnabled && inState[s]);
 
       rule runStmt (actionsEnabled && inState[s] && !fsmRunning);
-        if (verbose && shouldDisplay(stmtApps[i]))
-          $display(timeInfo, formatApp(stmtApps[i]));
         if (!wedgeCheck)
           begin
+            if (verbose && shouldDisplay(stmtApps[i]))
+              $display(timeInfo, formatApp(stmtApps[i]));
             fsm.start;
             fsmRunning <= True;
             waitWire.send;
@@ -1507,7 +1507,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   function Stmt storeToFile(Bit#(32) depth) =
     seq
       action
-        $write("\nSaving state to '%s'", filename);
+        $display("Saving state to '%s'", filename);
 
         // Open file for writing
         let file <- $fopen(filename, "w");
