@@ -44,4 +44,6 @@ rm -f testStackIDClassify
 rm -f mkArithChecker
 rm -f mkFirstHotChecker
 rm -f mkCustomGenExample
+rm -f mkWedgeExample
+rm -f mkWedgeExample2
 rm -f test*.v
