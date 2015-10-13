@@ -1384,6 +1384,9 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         // If a wedge was detected, abort the FSM early so BlueCheck can recover
         fsm.abort;
         fsmRunning <= False;
+        // Set the stmt as fired so it will get recorded in the timeFIFO for shrinking
+        didFire.send;
+        $display(timeInfo, "rule abortStmt fired");
       endrule
 
       rule viewStmt (triggerView && inState[s]);
@@ -1688,16 +1691,20 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
             end
         endaction
 
-      action
-        prePostActive <= True;
-        postFSM.start;
-      endaction
-      action
-        await(postFSM.done || wedgeDetected);
-        prePostActive <= False;
-      endaction
-      if (wedgeDetected)
-        postFSM.abort;
+      // Don't do post statement if there was already an error
+      if (!failureFound)
+        seq
+          action
+            prePostActive <= True;
+            postFSM.start;
+          endaction
+          action
+            await(postFSM.done || wedgeDetected);
+            prePostActive <= False;
+          endaction
+          if (wedgeDetected)
+            postFSM.abort;
+        endseq
 
       if (!failureFound)
         action
@@ -1777,16 +1784,20 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         count <= 0;
       endaction
 
-      action
-        prePostActive <= True;
-        postFSM.start;
-      endaction
-      action
-        await(postFSM.done || wedgeDetected);
-        prePostActive <= False;
-      endaction
-      if (wedgeDetected)
-        postFSM.abort;
+      // Don't do post statement if there was already an error
+      if (!failureFound)
+        seq
+          action
+            prePostActive <= True;
+            postFSM.start;
+          endaction
+          action
+            await(postFSM.done || wedgeDetected);
+            prePostActive <= False;
+          endaction
+          if (wedgeDetected)
+            postFSM.abort;
+        endseq
     endseq;
 
   // Simply view a counter-example loaded from a file (i.e. don't replay it)
@@ -1976,19 +1987,22 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
                 endaction
 
               // Execute user-defined post-statements
-              action
-                prePostActive <= True;
-                postFSM.start;
-              endaction
-              action
-                await(postFSM.done || wedgeDetected);
-                prePostActive <= False;
-              endaction
-
-              action
-                if (wedgeDetected) postFSM.abort;
-                testNum <= testNum+1;
-              endaction
+              // Don't do post statement if there was already an error
+              if (!failureFound)
+                seq
+                  action
+                    prePostActive <= True;
+                    postFSM.start;
+                  endaction
+                  action
+                    await(postFSM.done || wedgeDetected);
+                    prePostActive <= False;
+                  endaction
+                  if (wedgeDetected)
+                    postFSM.abort;
+                endseq
+              // ANDY: This differs from the original by a cycle
+              testNum <= testNum+1;
             endseq
 
           if (!failureFound) action
