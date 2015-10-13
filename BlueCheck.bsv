@@ -1223,7 +1223,8 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   // ------------------------------------------------
 
   ConfigReg#(Bit#(32)) count <- mkConfigReg(0);
-  Bool actionsEnabled = count != 0;
+  ConfigReg#(Bool) wedgeCheck <- mkConfigReg(False);
+  Bool actionsEnabled = wedgeCheck || (count != 0);
 
   // When delayed count is 0, invariant checking is disabled
   // -------------------------------------------------------
@@ -1245,6 +1246,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   Wire#(Bool) resetFailure <- mkDWire(False);
   PulseWire wedgeFailure   <- mkPulseWireOR;
   Reg#(Bool) wedgeDetected <- mkConfigReg(False);
+  Reg#(Bool) wedgeShrinking <- mkConfigReg(False);
   Bool ensureFailure       =  List::any( \== (False), ensureBools);
   Bool invariantFailure    = (waitWire || !checkingEnabled) ? False
                            : List::any( \== (False),
@@ -1366,9 +1368,17 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       rule runStmt (actionsEnabled && inState[s] && !fsmRunning);
         if (verbose && shouldDisplay(stmtApps[i]))
           $display(timeInfo, formatApp(stmtApps[i]));
-        fsm.start;
-        fsmRunning <= True;
-        waitWire.send;
+        if (!wedgeCheck)
+          begin
+            fsm.start;
+            fsmRunning <= True;
+            waitWire.send;
+          end
+        else
+          begin
+            // If we are looking for wedges, don't bother starting the FSM
+            didFire.send;
+          end
       endrule
 
       rule assertWait (actionsEnabled && inState[s] && fsmRunning && !fsm.done);
@@ -1380,13 +1390,14 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         didFire.send;
       endrule
 
-      rule abortStmt (actionsEnabled && inState[s] && fsmRunning && wedgeDetected);
-        // If a wedge was detected, abort the FSM early so BlueCheck can recover
+      rule abortStmt (actionsEnabled && inState[s] && fsmRunning && (wedgeDetected || wedgeCheck));
+        // If a wedge was detected, abort the FSM early so BlueCheck can recover.
+        // Or if we are just checking for a wedge, don't bother trying to finish the FSM,
+        //  all we care about is that it could start.
         fsm.abort;
         fsmRunning <= False;
         // Set the stmt as fired so it will get recorded in the timeFIFO for shrinking
         didFire.send;
-        $display(timeInfo, "rule abortStmt fired");
       endrule
 
       rule viewStmt (triggerView && inState[s]);
@@ -1784,20 +1795,31 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         count <= 0;
       endaction
 
-      // Don't do post statement if there was already an error
       if (!failureFound)
-        seq
-          action
-            prePostActive <= True;
-            postFSM.start;
-          endaction
-          action
-            await(postFSM.done || wedgeDetected);
-            prePostActive <= False;
-          endaction
-          if (wedgeDetected)
-            postFSM.abort;
-        endseq
+        if (wedgeShrinking)
+          // In some cases, try to execute another action until didFire became true
+          seq
+            wedgeCheck <= True;
+            while (!didFire && !failureFound)
+              action
+                state <= bound(stateGen.out, numStates-1);
+              endaction
+            wedgeCheck <= False;
+          endseq
+        else
+          // In other cases, just do the post statement
+          seq
+            action
+              prePostActive <= True;
+              postFSM.start;
+            endaction
+            action
+              await(postFSM.done || wedgeDetected);
+              prePostActive <= False;
+            endaction
+            if (wedgeDetected)
+              postFSM.abort;
+          endseq
     endseq;
 
   // Simply view a counter-example loaded from a file (i.e. don't replay it)
@@ -1835,13 +1857,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
     seq
       // Initialise shrinker
       action
-        if (wedgeDetected)
-          begin
-            $display("\nPossible wedge detected:");
-            omitNum <= counterExampleLen;
-          end
-        else
-          omitNum <= 0;
+        omitNum <= 0;
         deleteNum <= Invalid;
       endaction
 
@@ -1891,6 +1907,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       action
         resetFailure <= True;
         iterCount <= 0;
+        wedgeShrinking <= False;
 
         // When not shrinking, enable output
         if (! shrinkingEnabled) begin
@@ -1948,8 +1965,13 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
               endaction
               action
                 // This can't be done with the previous action
-                if (wedgeDetected) preFSM.abort;
-                count <= 1;
+                if (wedgeDetected)
+                  begin
+                    preFSM.abort;
+                    testDone <= True;
+                  end
+                else
+                  count <= 1;
               endaction
               while (!testDone)
                 action
@@ -2001,7 +2023,11 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
                   if (wedgeDetected)
                     postFSM.abort;
                 endseq
-              // ANDY: This differs from the original by a cycle
+              else if (wedgeDetected)
+                action
+                  // set wedgeShrinking if wedge found before postStmt
+                  wedgeShrinking <= True;
+                endaction
               testNum <= testNum+1;
             endseq
 
