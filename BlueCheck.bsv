@@ -61,7 +61,7 @@ typedef struct {
   Bool wedgeDetect;
 
   // How many cycles of inactivity does the wedge-detector wait for?
-  Bit#(16) wedgeThreshold;
+  Bit#(32) wedgeThreshold;
 
   // Generate a checker based on an iterative deepening strategy
   // (If 'False', a single random state walk is performed)
@@ -1246,7 +1246,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   Reg#(Bool) triggerView  <- mkDReg(False);
 
   // Wedge detector: count consecutive non-firings
-  Reg#(Bit#(16)) consecutiveNonFires <- mkReg(0);
+  Reg#(Bit#(32)) consecutiveNonFires <- mkReg(0);
 
   // State machines for pre and post actions
   FSM preFSM <- mkFSM(preStmt);
