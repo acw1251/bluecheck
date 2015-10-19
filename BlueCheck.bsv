@@ -730,7 +730,7 @@ function Action displayClassifications(List#(Classification) cs) =
   action
     function Action f(Classification c) =
       action
-        $display("%0d%%", (c.positive*100)/c.total, " ", c.name);
+        $fdisplay(stderr, "%0d%%", (c.positive*100)/c.total, " ", c.name);
       endaction;
     let _ <- List::mapM(f, cs);
   endaction;
@@ -770,7 +770,7 @@ module [BlueCheck] getEnsureMsg (EnsureMsg);
   Wire#(Bool) ok <- mkDWire(True);
   Reg#(Bool) showMsg <- mkReg(False);
   function Action ensureFunc(Bool cond, Fmt msg) =
-    action ok <= cond; if (!cond && showMsg) $display(msg); endaction;
+    action ok <= cond; if (!cond && showMsg) $fdisplay(stderr, msg); endaction;
   addToCollection(tagged EnsureItem (tuple2(ok, showMsg)));
   return ensureFunc;
 endmodule
@@ -850,7 +850,7 @@ function Stmt seqList(Bool show, Fmt msg_prefix, List#(Tuple2#(App, Stmt)) xs);
     Stmt s  =
       seq
         action
-          if (show && shouldDisplay(app)) $display(msg_prefix, formatApp(app));
+          if (show && shouldDisplay(app)) $fdisplay(stderr, msg_prefix, formatApp(app));
         endaction
         tpl_2(t);
       endseq;
@@ -1332,7 +1332,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
   if (List::length(ensureBools) > 0)
     rule checkEnsure (!failureReg && List::any( \== (False) , ensureBools));
-      if (verbose) $display(timeInfo, "'ensure' statement failed");
+      if (verbose) $fdisplay(stderr, timeInfo, "'ensure' statement failed");
     endrule
 
   // Generate rules to check invariants
@@ -1344,7 +1344,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       let msg = tpl_1(invariantBools[i]);
       let b   = tpl_2(invariantBools[i]);
       rule checkInvariantBool (checkingEnabled && !failureReg && !waitWire);
-        if (!b && verbose) $display(timeInfo, msg);
+        if (!b && verbose) $fdisplay(stderr, timeInfo, msg);
       endrule
     end
 
@@ -1356,14 +1356,14 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
     begin
       rule runAction (actionsEnabled && inState[i] && !waitWire);
         if (verbose && shouldDisplay(actionApps[i]) && !wedgeCheck)
-          $display(timeInfo, formatApp(actionApps[i]));
+          $fdisplay(stderr, timeInfo, formatApp(actionApps[i]));
         actions[i];
         didFire.send;
       endrule
 
       rule viewAction (triggerView && inState[i]);
         if (shouldDisplay(actionApps[i]))
-          $display(timeInfo, formatApp(actionApps[i]));
+          $fdisplay(stderr, timeInfo, formatApp(actionApps[i]));
       endrule
     end
 
@@ -1377,7 +1377,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       else begin
         if (consecutiveNonFires == params.wedgeThreshold)
           begin
-            if (verbose) $display("\nPossible wedge detected\n");
+            if (verbose) $fdisplay(stderr, "\nPossible wedge detected\n");
             consecutiveNonFires <= 0;
             wedgeFailure.send;
           end
@@ -1403,7 +1403,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         if (!wedgeCheck)
           begin
             if (verbose && shouldDisplay(stmtApps[i]))
-              $display(timeInfo, formatApp(stmtApps[i]));
+              $fdisplay(stderr, timeInfo, formatApp(stmtApps[i]));
             fsm.start;
             fsmRunning <= True;
             waitWire.send;
@@ -1436,7 +1436,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
       rule viewStmt (triggerView && inState[s]);
         if (shouldDisplay(stmtApps[i]))
-          $display(timeInfo, formatApp(stmtApps[i]));
+          $fdisplay(stderr, timeInfo, formatApp(stmtApps[i]));
       endrule
     end
 
@@ -1450,7 +1450,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
   if (params.showNoOp || numStates == 1)
     rule noOp (actionsEnabled && state == 0);
-      if (params.showNoOp && verbose) $display(timeInfo, "No-op");
+      if (params.showNoOp && verbose) $fdisplay(stderr, timeInfo, "No-op");
       if (numStates == 1) didFire.send;
     endrule
 
@@ -1482,14 +1482,14 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   Stmt loadFromFile = 
     seq
       action
-        $display("Loading state from '%s'", filename);
+        $fdisplay(stderr, "Loading state from '%s'", filename);
 
         // Open file for reading
         let file <- $fopen(filename, "r");
 
         // Check result
         if (file == InvalidFile) begin
-          $display("Can't open file '%s'", filename);
+          $fdisplay(stderr, "Can't open file '%s'", filename);
           $finish(0);
         end
         seedFile <= file;
@@ -1541,14 +1541,14 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
   function Stmt storeToFile(Bit#(32) depth) =
     seq
       action
-        $display("Saving state to '%s'", filename);
+        $fdisplay(stderr, "Saving state to '%s'", filename);
 
         // Open file for writing
         let file <- $fopen(filename, "w");
 
         // Check result
         if (file == InvalidFile) begin
-          $display("Can't open file '%s'", filename);
+          $fdisplay(stderr, "Can't open file '%s'", filename);
           $finish(0);
         end
         seedFile <= file;
@@ -1753,7 +1753,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
       if (!failureFound)
         action
-          $display("OK: passed %0d iterations", params.numIterations);
+          $fdisplay(stderr, "OK: passed %0d iterations", params.numIterations);
           showClassifications;
         endaction
       action
@@ -1900,13 +1900,13 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       while (omitNum <= counterExampleLen)
         seq
           action
-            if (verbose) $display("=== Shrink attempt %0d ===", omitNum);
+            if (verbose) $fdisplay(stderr, "=== Shrink attempt %0d ===", omitNum);
             // Display counter example even if verbose == False
             if (!verbose && omitNum == counterExampleLen)
               begin
                 verbose <= True;
                 let _ <- List::mapM(assignReg(True), ensureShows);
-                $display("");
+                $fdisplay(stderr, "");
               end
           endaction
 
@@ -1959,8 +1959,8 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
           // Check that the depth is OK
           if ((shrinkingEnabled || params.allowViewing) &&
             currentDepth >= fromInteger(maxSeqLen)) seq
-            $display("Max depth of %0d", maxSeqLen-1, " exceeded.");
-            $display("Increase the 'maxSeqLen' parameter in BlueCheck.bsv.");
+            $fdisplay(stderr, "Max depth of %0d", maxSeqLen-1, " exceeded.");
+            $fdisplay(stderr, "Increase the 'maxSeqLen' parameter in BlueCheck.bsv.");
             $finish(0);
           endseq
 
@@ -1973,7 +1973,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
 
               // Initialise test
               action
-                $write("=== Depth %0d, Test %0d/%0d ===%c", currentDepth,
+                $fwrite(stderr, "=== Depth %0d, Test %0d/%0d ===%c", currentDepth,
                   testNum+1, params.id.testsPerDepth, verbose ? 10 : 13);
                 testDone <= False;
                 counterExampleLen <= currentDepth;
@@ -2066,7 +2066,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
             endseq
 
           if (!failureFound) action
-            $display("");
+            $fdisplay(stderr, "");
             currentDepth <= params.id.incDepth(currentDepth);
             iterCount <= iterCount+1;
           endaction
@@ -2080,7 +2080,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
       // found a failure or performed the desired number of tests.
       if (!failureFound)
         action
-          $display("\nOK: passed %0d test sequences",
+          $fdisplay(stderr, "\nOK: passed %0d test sequences",
                      params.numIterations*params.id.testsPerDepth);
           showClassifications;
         endaction
@@ -2088,7 +2088,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
         if (shrinkingEnabled)
           shrink;
         else
-          $display("\nFAILED: counter-example found");
+          $fdisplay(stderr, "\nFAILED: counter-example found");
       endseq
     endseq;
 
@@ -2113,7 +2113,7 @@ module [Module] mkModelChecker#( BlueCheck#(Empty) bc
           iterativeDeepening;
           if (params.interactive)
             action
-              $display("Continue searching?\n",
+              $fdisplay(stderr, "Continue searching?\n",
                        "Press ENTER to continue or Ctrl-D to stop: ");
               int c <- $fgetc(stdin);
               if (c < 0) doneUI <= True;
