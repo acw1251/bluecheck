@@ -477,6 +477,8 @@ endinstance
 instance Prop#(ActionValue#(Bool));
   module [BlueCheck] addProp#(Freq freq, App app, ActionValue#(Bool) a) ();
     Wire#(Bool) success <- mkDWire(True);
+    // This does not need to display the formatted app because the ActionItem
+    // in the collection will display the app
     Fmt msg = $format("Property does not hold");
 
     Action act =
@@ -623,14 +625,27 @@ endinstance
 instance Equiv#(a) provisos(Eq#(a), FShow#(a));
   module [BlueCheck] addEquiv#(Freq fr, App app, a x, a y) ();
     Wire#(Bool) success <- mkDWire(True);
-    Fmt fmt = formatApp(app) + fshow(" failed: ")
-            + fshow(x) + fshow(" v ") + fshow(y);
 
-    rule check;
-      if (x != y) success <= False;
-    endrule
-     
-    addToCollection(tagged InvariantItem (tuple2(fmt, success)));
+    if (length(app.args) == 0) begin
+      // no arguments
+      Fmt fmt = formatApp(app) + fshow(" failed: ")
+              + fshow(x) + fshow(" v ") + fshow(y);
+      rule check;
+        if (x != y) success <= False;
+      endrule
+      addToCollection(tagged InvariantItem (tuple2(fmt, success)));
+    end else begin
+      // these are values from functions with arguments, so treat
+      // them as actions
+      Fmt msg =  fshow("Not equal: ") + fshow(x)
+              +  fshow(" versus ")    + fshow(y);
+      Action check =
+        action
+          if (x != y) success <= False;
+        endaction;
+      addToCollection(tagged ActionItem (tuple3(fr, app, check)));
+      addToCollection(tagged InvariantItem (tuple2(msg, success)));
+    end
   endmodule
 endinstance
 
