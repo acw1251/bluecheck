@@ -46,4 +46,5 @@ rm -f mkFirstHotChecker
 rm -f mkCustomGenExample
 rm -f mkWedgeExample
 rm -f mkWedgeExample2
+rm -f mkBoolPropExample
 rm -f test*.v

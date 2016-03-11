@@ -56,6 +56,7 @@ echo "(10) Stack(synthesisable) + ID"
 echo "(11) Wedge Test"
 echo "(12) Wedge Test with Guarded Stmt"
 echo "(13) Wedge Test 2"
+echo "(14) Bool Prop Example"
 
 read OPTION
 case "$OPTION" in
@@ -99,6 +100,9 @@ case "$OPTION" in
      ;;
  13) TOPFILE=WedgeExample.bsv
      TOPMOD=mkWedgeExample2
+     ;;
+ 14) TOPFILE=BoolPropExample.bsv
+     TOPMOD=mkBoolPropExample
      ;;
   *) echo "Option not recognised"
      exit
